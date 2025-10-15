@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # Configuration - Update these values
-EMAIL="r.oblonczek@auvaria.com"
-PASSWORD="Gladbach1."
+EMAIL="xx"
+PASSWORD="xxx."
 CLIENT_ID="5aqpc5nkm2cinrfcdiiiks6kgc"
 USER_POOL_ID="eu-central-1_2ZryMv0qs"
 REGION="eu-central-1"
