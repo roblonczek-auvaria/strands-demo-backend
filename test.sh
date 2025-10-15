@@ -1,8 +1,54 @@
-curl -X POST "https://bedrock-agentcore.eu-central-1.amazonaws.com/runtimes/arn%3Aaws%3Abedrock-agentcore%3Aeu-central-1%3A081302066317%3Aruntime%2Fdemo_rag_agent-CYaQGc8qoH/invocations?qualifier=DEFAULT" \
--H "Authorization: Bearer eyJraWQiOiJHbzVwMW01RU1LQnh2bW4reVpESUNTeVBzSUNFR3Z0RmFpem9ORGRHWjU0PSIsImFsZyI6IlJTMjU2In0.eyJzdWIiOiJmMzk0NTgxMi0wMGIxLTcwZDktZDRmNC0zMTE5ODUyN2IwMmYiLCJlbWFpbF92ZXJpZmllZCI6dHJ1ZSwiaXNzIjoiaHR0cHM6XC9cL2NvZ25pdG8taWRwLmV1LWNlbnRyYWwtMS5hbWF6b25hd3MuY29tXC9ldS1jZW50cmFsLTFfT0drYjdIYlJ2IiwiY29nbml0bzp1c2VybmFtZSI6ImYzOTQ1ODEyLTAwYjEtNzBkOS1kNGY0LTMxMTk4NTI3YjAyZiIsIm9yaWdpbl9qdGkiOiI2MDdjMTEwMy00NTRmLTRlMjMtYWU5NS1hMTNjZjljNjQxZjEiLCJhdWQiOiIyYjEwdjl2bzdsdTYzdXNjNTlnNTNydWFvbCIsImV2ZW50X2lkIjoiODMwMjU3ZmQtNzM3Ny00MjNhLThlOTAtNWI5NTIxY2ZmY2NmIiwidG9rZW5fdXNlIjoiaWQiLCJhdXRoX3RpbWUiOjE3NjAwMDU0OTMsImV4cCI6MTc2MDAwOTA5MywiaWF0IjoxNzYwMDA1NDkzLCJqdGkiOiJhMzMwMWY1NS04NTk4LTQ5MDUtYjY2My0yYjlmMGQxYTczNzgiLCJlbWFpbCI6InIub2Jsb25jemVrQGF1dmFyaWEuY29tIn0.HpmsSI3mYaHCfpfSn5sC4nN8TpQ8qGt3rOepCymhbJrQhjNLVbkjmMtUioLnathx_qncEQ10FWCUBbjmm7VmNk1MtsiE8Vox-BRtbnRKWeeFwrur3lsUt_qXHrvm45JeEa0dlXTr6-B1Fd98RxuYN78kyARLw1ysSO9pr-AlhvakQ-MolLva-Og7Aaspj7BELs3u__f-_Khfp-Yc9XA9D8OBKQlOas8GA5-6VIWFdglLwkh84E0hCQAE9zXRmyW9grzHFgHNxfKXEayIRb4QdG0HXZ369o9AxuPOzxf7i4Q-wXrzMjxUY8id7HL0ZNtcPC85Pr1yCUx3jwJRCdzm_w" \
+#!/bin/bash
+
+# Configuration - Update these values
+EMAIL="r.oblonczek@auvaria.com"
+PASSWORD="Gladbach1."
+CLIENT_ID="5aqpc5nkm2cinrfcdiiiks6kgc"
+USER_POOL_ID="eu-central-1_2ZryMv0qs"
+REGION="eu-central-1"
+AGENT_ARN="arn:aws:bedrock-agentcore:eu-central-1:081302066317:runtime/demo_streaming_rag_agent_prod-6wk6lmHdeK"
+
+echo "🔐 Authenticating with Cognito..."
+
+# Use admin-initiate-auth which works better for server-to-server auth
+# This requires the AWS credentials to have cognito-idp:AdminInitiateAuth permission
+AUTH_RESPONSE=$(aws cognito-idp initiate-auth \
+    --client-id "$CLIENT_ID" \
+    --region "$REGION" \
+    --auth-flow USER_PASSWORD_AUTH \
+    --auth-parameters USERNAME="$EMAIL",PASSWORD="$PASSWORD" \
+    --output json)
+
+if [ $? -ne 0 ]; then
+    echo "❌ Authentication failed"
+    echo "$AUTH_RESPONSE"
+    exit 1
+fi
+
+# Extract the access token (matching your frontend's usage)
+JWT_TOKEN=$(echo "$AUTH_RESPONSE" | jq -r '.AuthenticationResult.AccessToken')
+
+if [ "$JWT_TOKEN" = "null" ] || [ -z "$JWT_TOKEN" ]; then
+    echo "❌ Failed to extract JWT token"
+    echo "Response: $AUTH_RESPONSE"
+    exit 1
+fi
+
+echo "✅ Authentication successful"
+echo "🚀 Calling agent..."
+
+# Step 2: Call the agent with the JWT token
+# URL encode the ARN exactly like the frontend does with encodeURIComponent
+ENCODED_ARN=$(printf '%s' "$AGENT_ARN" | python3 -c "import sys, urllib.parse; print(urllib.parse.quote(sys.stdin.read().strip(), safe=''))")
+ENDPOINT="https://bedrock-agentcore.$REGION.amazonaws.com/runtimes/$ENCODED_ARN/invocations?qualifier=DEFAULT"
+
+echo "📍 Endpoint: $ENDPOINT"
+
+curl -X POST "$ENDPOINT" \
+-H "Authorization: Bearer $JWT_TOKEN" \
 -H "Content-Type: application/json" \
 -H "Accept: text/event-stream" \
 -H "X-Amzn-Bedrock-AgentCore-Runtime-Session-Id: test_session_$(date +%s)_$(date +%N)_extra" \
 -d '{
-"prompt": "what is hibernation state?",
+"prompt": "what is hibernation state?"
 }'

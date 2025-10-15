@@ -9,17 +9,18 @@ import boto3
 import time
 
 # ============================================================================
-# CONFIGURATION
+# CONFIGURATION - Updated to match deploy_agent-prod.py
 # ============================================================================
 
-AGENT_RUNTIME_ARN = 'arn:aws:bedrock-agentcore:eu-central-1:081302066317:runtime/demo_rag_agent-CYaQGc8qoH'
-CONTAINER_URI = '081302066317.dkr.ecr.eu-central-1.amazonaws.com/romanian-legal-rag-agent:latest'
+# TODO: Replace with your actual agent ARN after initial deployment
+AGENT_RUNTIME_ARN = 'arn:aws:bedrock-agentcore:eu-central-1:081302066317:runtime/demo_streaming_rag_agent_prod-XXXXXX'
+CONTAINER_URI = '081302066317.dkr.ecr.eu-central-1.amazonaws.com/streaming-agent:latest'
 ROLE_ARN = 'arn:aws:iam::081302066317:role/strands-test-agent'
 REGION = 'eu-central-1'
 
-# Cognito Authentication (must match original deployment)
-COGNITO_USER_POOL_ID = 'eu-central-1_OGkb7HbRv'
-COGNITO_CLIENT_ID = '2b10v9vo7lu63usc59g53ruaol'
+# Cognito Authentication (from deploy_agent-prod.py)
+COGNITO_USER_POOL_ID = 'eu-central-1_2ZryMv0qs'
+COGNITO_CLIENT_ID = '5aqpc5nkm2cinrfcdiiiks6kgc'
 COGNITO_REGION = 'eu-central-1'
 
 # ============================================================================

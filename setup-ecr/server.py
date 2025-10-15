@@ -28,8 +28,8 @@ logger = logging.getLogger(__name__)
 
 # Create FastAPI app
 app = FastAPI(
-    title="Romanian Legal RAG Agent",
-    description="RAG Agent with access to Romanian legal documents, treaties, and international agreements",
+    title="RAG Agent",
+    description="RAG Agent with knowledge base access",
     version="1.0.0"
 )
 
@@ -154,8 +154,6 @@ def _build_response_payload(response_str: str) -> tuple[Dict[str, Any], Dict[str
 class InvocationRequest(BaseModel):
     input: Optional[Dict[str, Any]] = None
     prompt: Optional[str] = None  # Support both formats
-    topic: Optional[str] = None   # Allow passing topic at top-level
-    active_only: Optional[Any] = None  # bool or string; we'll normalize later
 
 class InvocationResponse(BaseModel):
     output: Optional[Dict[str, Any]] = None
@@ -177,19 +175,9 @@ async def invoke_agent(request: Union[InvocationRequest, Dict[str, Any]], raw_re
                 detail="RAG agent not initialized. Check server logs for details."
             )
         agent = rag_agent
-        # Capture raw body for diagnostics (helps when fields missing like topic)
-        raw_body_bytes = b""
-        try:
-            raw_body_bytes = await raw_request.body()
-            trimmed = raw_body_bytes[:1000]
-            logger.info("Raw request body (truncated 1000 chars): %r", trimmed)
-        except Exception as rb_err:
-            logger.warning("Could not read raw request body: %s", rb_err)
 
-        # Extract user message and optional filter controls from different possible formats
+        # Extract user message from different possible formats
         user_message = None
-        topic = None
-        active_only = None
         body_stream_preference: Optional[bool] = None
 
         if isinstance(request, dict):
@@ -197,15 +185,11 @@ async def invoke_agent(request: Union[InvocationRequest, Dict[str, Any]], raw_re
             if "input" in request and isinstance(request["input"], dict):
                 inner = request["input"]
                 user_message = inner.get("prompt")
-                topic = inner.get("topic") if isinstance(inner, dict) else None
-                active_only = inner.get("active_only") if isinstance(inner, dict) else None
                 candidate = _normalize_bool(inner.get("stream"))
                 if candidate is not None:
                     body_stream_preference = candidate
             elif "prompt" in request:
                 user_message = request.get("prompt")
-                topic = request.get("topic")
-                active_only = request.get("active_only")
                 candidate = _normalize_bool(request.get("stream"))
                 if candidate is not None:
                     body_stream_preference = candidate
@@ -213,44 +197,14 @@ async def invoke_agent(request: Union[InvocationRequest, Dict[str, Any]], raw_re
             # Handle Pydantic model input
             if request.input and isinstance(request.input, dict):
                 user_message = request.input.get("prompt")
-                topic = request.input.get("topic")
-                active_only = request.input.get("active_only")
                 candidate = _normalize_bool(request.input.get("stream"))
                 if candidate is not None:
                     body_stream_preference = candidate
             elif request.prompt:
                 user_message = request.prompt
-                # Pull direct fields if present on model
-                if getattr(request, 'topic', None) and not topic:
-                    topic = request.topic
-                if getattr(request, 'active_only', None) is not None and active_only is None:
-                    active_only = request.active_only
                 candidate = _normalize_bool(getattr(request, "stream", None))
                 if candidate is not None:
                     body_stream_preference = candidate
-        
-        # Fallback: if topic still None attempt manual JSON parse of raw body (in case FastAPI model coercion dropped field)
-        if topic is None or active_only is None:
-            try:
-                import json as _json
-                rb_json = _json.loads(raw_body_bytes.decode('utf-8')) if raw_body_bytes else {}
-                if isinstance(rb_json, dict):
-                    # Mirror earlier extraction logic
-                    if topic is None and 'topic' in rb_json and rb_json.get('topic') not in (None, ""):
-                        topic = rb_json.get('topic')
-                    if active_only is None and 'active_only' in rb_json:
-                        active_only = rb_json.get('active_only')
-                    elif 'input' in rb_json and isinstance(rb_json['input'], dict) and rb_json['input'].get('topic'):
-                        topic = rb_json['input'].get('topic')
-                        if active_only is None and 'active_only' in rb_json['input']:
-                            active_only = rb_json['input'].get('active_only')
-                    if body_stream_preference is None:
-                        if 'stream' in rb_json:
-                            body_stream_preference = _normalize_bool(rb_json.get('stream'))
-                        elif 'input' in rb_json and isinstance(rb_json['input'], dict):
-                            body_stream_preference = _normalize_bool(rb_json['input'].get('stream'))
-            except Exception as _fallback_err:
-                logger.debug("Fallback topic parse failed: %s", _fallback_err)
 
         if not user_message:
             raise HTTPException(
@@ -259,23 +213,6 @@ async def invoke_agent(request: Union[InvocationRequest, Dict[str, Any]], raw_re
             )
 
         logger.info(f"Processing query: {user_message[:100]}...")
-
-        # Propagate topic / active_only into environment for dynamic filter (ask_knowledgebase uses env vars)
-        if topic:
-            os.environ["KB_TOPIC"] = str(topic)
-        else:
-            os.environ.pop("KB_TOPIC", None)
-        if isinstance(active_only, bool):
-            os.environ["KB_ACTIVE_ONLY"] = "1" if active_only else "0"
-        elif isinstance(active_only, str):
-            os.environ["KB_ACTIVE_ONLY"] = "1" if active_only.lower() in {"1", "true", "yes"} else "0"
-        elif active_only is None:
-            os.environ.setdefault("KB_ACTIVE_ONLY", "0")
-
-        logger.info(
-            "Applied retrieval filter context: topic=%s active_only=%s (KB_TOPIC=%s, KB_ACTIVE_ONLY=%s)",
-            topic, active_only, os.getenv("KB_TOPIC"), os.getenv("KB_ACTIVE_ONLY")
-        )
 
         query_stream_preference = _normalize_bool(raw_request.query_params.get("stream"))
         accept_header = raw_request.headers.get("accept", "")
@@ -400,8 +337,8 @@ async def root():
     Root endpoint with basic information.
     """
     return {
-        "service": "Romanian Legal RAG Agent",
-        "description": "RAG Agent with access to Romanian legal documents, treaties, and international agreements",
+        "service": "RAG Agent",
+        "description": "RAG Agent with knowledge base access",
         "endpoints": {
             "POST /invocations": "Main agent interaction endpoint",
             "POST /reset": "Reset and recreate in-memory agent (clears conversational context)",
@@ -446,5 +383,5 @@ async def reset_status():
 
 if __name__ == "__main__":
     import uvicorn
-    logger.info("Starting Romanian Legal RAG Agent server...")
+    logger.info("Starting RAG Agent server...")
     uvicorn.run(app, host="0.0.0.0", port=8080)
