@@ -36,7 +36,7 @@ def deploy_agent():
     """Deploy the agent to Bedrock AgentCore."""
     
     print("="*70)
-    print("Deploying Romanian Legal RAG Agent to Bedrock AgentCore")
+    print("Deploying RAG Agent to Bedrock AgentCore")
     print("="*70)
     print(f"\nAgent Name: {AGENT_NAME}")
     print(f"Container URI: {CONTAINER_URI}")

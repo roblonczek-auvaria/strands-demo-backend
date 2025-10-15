@@ -7,7 +7,7 @@ This server provides the required endpoints f        # Debug: Log the raw respon
 - POST /invocations: Main agent interaction endpoint
 - GET /ping: Health check endpoint
 
-The server integrates with the RAG agent that has access to Romanian legal documents.
+The server integrates with the RAG agent that has access to a documentation Knowledgebase.
 """
 
 from fastapi import FastAPI, HTTPException, Request
@@ -140,7 +140,7 @@ def _build_response_payload(response_str: str) -> tuple[Dict[str, Any], Dict[str
         "output": {
             "message": unified,
             "timestamp": datetime.now(timezone.utc).isoformat(),
-            "model": "romanian-legal-rag-agent",
+            "model": "rag-agent",
             "agent_type": "strands_rag_agent",
         }
     }
