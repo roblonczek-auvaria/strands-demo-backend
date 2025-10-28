@@ -20,7 +20,7 @@ import json
 import re
 import logging
 import os
-from rag_agent import create_rag_agent
+from rag_agent import create_rag_agent, AVAILABLE_MODELS, DEFAULT_MODEL_ID
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -42,12 +42,31 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize the RAG agent
+# Agent cache keyed by model_id so we can reuse agents for repeated requests.
+_agent_cache: dict[str, Any] = {}
+
+def _get_or_create_agent(model_id: Optional[str]) -> Any:
+    chosen = model_id or DEFAULT_MODEL_ID
+    if chosen not in AVAILABLE_MODELS:
+        logger.warning("Unknown model_id '%s' requested; falling back to default '%s'", chosen, DEFAULT_MODEL_ID)
+        chosen = DEFAULT_MODEL_ID
+    if chosen in _agent_cache:
+        return _agent_cache[chosen]
+    try:
+        agent = create_rag_agent(chosen)
+        _agent_cache[chosen] = agent
+        logger.info("Created new agent for model_id=%s", chosen)
+        return agent
+    except Exception as e:
+        logger.error("Failed to create agent for model_id=%s: %s", chosen, e)
+        raise
+
 try:
-    rag_agent = create_rag_agent()
-    logger.info("RAG agent initialized successfully")
+    # Warm default agent
+    rag_agent = _get_or_create_agent(DEFAULT_MODEL_ID)
+    logger.info("Default RAG agent initialized successfully (model=%s)", DEFAULT_MODEL_ID)
 except Exception as e:
-    logger.error(f"Failed to initialize RAG agent: {e}")
+    logger.error(f"Failed to initialize default RAG agent: {e}")
     rag_agent = None
 
 # Reset bookkeeping
@@ -154,6 +173,7 @@ def _build_response_payload(response_str: str) -> tuple[Dict[str, Any], Dict[str
 class InvocationRequest(BaseModel):
     input: Optional[Dict[str, Any]] = None
     prompt: Optional[str] = None  # Support both formats
+    model_id: Optional[str] = None  # Allow top-level model_id as convenience
 
 class InvocationResponse(BaseModel):
     output: Optional[Dict[str, Any]] = None
@@ -169,42 +189,59 @@ async def invoke_agent(request: Union[InvocationRequest, Dict[str, Any]], raw_re
     - Simple format: {"prompt": "question"}
     """
     try:
-        if rag_agent is None:
-            raise HTTPException(
-                status_code=500, 
-                detail="RAG agent not initialized. Check server logs for details."
-            )
-        agent = rag_agent
+        # Extract potential model_id early (allow provided either top-level or inside input)
+        requested_model: Optional[str] = None
+        if isinstance(request, dict):
+            requested_model = request.get("model_id")
+            if "input" in request and isinstance(request["input"], dict):
+                requested_model = request["input"].get("model_id") or requested_model
+        else:
+            requested_model = getattr(request, "model_id", None)
+            if request.input and isinstance(request.input, dict):
+                requested_model = request.input.get("model_id") or requested_model
+
+        # Acquire agent (cache per model)
+        try:
+            agent = _get_or_create_agent(requested_model)
+        except Exception:
+            raise HTTPException(status_code=500, detail="Failed to create agent for requested model")
 
         # Extract user message from different possible formats
         user_message = None
         body_stream_preference: Optional[bool] = None
 
         if isinstance(request, dict):
-            # Handle direct dict input
-            if "input" in request and isinstance(request["input"], dict):
-                inner = request["input"]
-                user_message = inner.get("prompt")
-                candidate = _normalize_bool(inner.get("stream"))
-                if candidate is not None:
-                    body_stream_preference = candidate
-            elif "prompt" in request:
+            inner = request.get("input")
+            if isinstance(inner, dict):
+                # Prefer nested prompt if provided
+                nested_prompt = inner.get("prompt")
+                if isinstance(nested_prompt, str) and nested_prompt.strip():
+                    user_message = nested_prompt
+                candidate_stream = _normalize_bool(inner.get("stream"))
+                if candidate_stream is not None:
+                    body_stream_preference = candidate_stream
+            # Fallback to top-level prompt if none extracted yet
+            if user_message is None and isinstance(request.get("prompt"), str):
                 user_message = request.get("prompt")
-                candidate = _normalize_bool(request.get("stream"))
-                if candidate is not None:
-                    body_stream_preference = candidate
+            if body_stream_preference is None:
+                top_stream = _normalize_bool(request.get("stream"))
+                if top_stream is not None:
+                    body_stream_preference = top_stream
         else:
-            # Handle Pydantic model input
-            if request.input and isinstance(request.input, dict):
-                user_message = request.input.get("prompt")
-                candidate = _normalize_bool(request.input.get("stream"))
-                if candidate is not None:
-                    body_stream_preference = candidate
-            elif request.prompt:
-                user_message = request.prompt
-                candidate = _normalize_bool(getattr(request, "stream", None))
-                if candidate is not None:
-                    body_stream_preference = candidate
+            inner = getattr(request, "input", None)
+            if isinstance(inner, dict):
+                nested_prompt = inner.get("prompt")
+                if isinstance(nested_prompt, str) and nested_prompt.strip():
+                    user_message = nested_prompt
+                candidate_stream = _normalize_bool(inner.get("stream"))
+                if candidate_stream is not None:
+                    body_stream_preference = candidate_stream
+            if user_message is None and isinstance(getattr(request, "prompt", None), str):
+                user_message = request.prompt  # type: ignore[attr-defined]
+            if body_stream_preference is None:
+                top_stream = _normalize_bool(getattr(request, "stream", None))
+                if top_stream is not None:
+                    body_stream_preference = top_stream
 
         if not user_message:
             raise HTTPException(
@@ -230,7 +267,7 @@ async def invoke_agent(request: Union[InvocationRequest, Dict[str, Any]], raw_re
             stream_requested = False
 
         if stream_requested:
-            logger.info("Streaming response requested")
+            logger.info("Streaming response requested (model_id=%s)", getattr(agent.model, 'model_id', 'unknown'))
 
             async def event_stream() -> AsyncIterator[str]:
                 full_chunks: list[str] = []
@@ -240,6 +277,7 @@ async def invoke_agent(request: Union[InvocationRequest, Dict[str, Any]], raw_re
                     return "data: " + json.dumps(payload, ensure_ascii=False) + "\n\n"
 
                 try:
+                    yield ":stream-start\n\n"
                     async for event in agent.stream_async(user_message):
                         if not isinstance(event, dict):
                             continue
@@ -258,6 +296,7 @@ async def invoke_agent(request: Union[InvocationRequest, Dict[str, Any]], raw_re
                             response_text = final_text
 
                     unified, agentcore_response, simple_response, parsed_json = _build_response_payload(response_text)
+                    agentcore_response["output"]["model_id"] = getattr(agent.model, 'model_id', None)
                     final_payload = {
                         "type": "final",
                         "response": simple_response["response"],
@@ -281,13 +320,15 @@ async def invoke_agent(request: Union[InvocationRequest, Dict[str, Any]], raw_re
                 },
             )
 
+        # Non-streaming path
+        logger.info("Using model_id=%s", getattr(agent.model, 'model_id', 'unknown'))
         result = agent(user_message)
         response_str = _extract_response_text(result)
         unified, agentcore_response, simple_response, parsed_json = _build_response_payload(response_str)
+        agentcore_response["output"]["model_id"] = getattr(agent.model, 'model_id', None)
 
         logger.info(f"Final raw content (first 200 chars): {response_str[:200]}")
         logger.info(f"Structured parsed: {parsed_json is not None}")
-
         logger.info("Query processed successfully")
 
         # Determine if original request was the simple format (just {"prompt": ...})
@@ -295,7 +336,6 @@ async def invoke_agent(request: Union[InvocationRequest, Dict[str, Any]], raw_re
         if isinstance(request, dict):
             is_simple = "input" not in request and "prompt" in request
         else:
-            # Pydantic model path
             try:
                 has_prompt = bool(getattr(request, 'prompt', None))
                 has_input = bool(getattr(request, 'input', None))
@@ -307,18 +347,13 @@ async def invoke_agent(request: Union[InvocationRequest, Dict[str, Any]], raw_re
 
         if is_simple:
             return simple_response
-        # Ensure AgentCore response ALSO includes a top-level 'response' for frontend resiliency
-        agentcore_response_with_alias = {**agentcore_response, "response": simple_response["response"]}
+        agentcore_response_with_alias = {**agentcore_response, "response": simple_response["response"], "model_id": agentcore_response["output"].get("model_id")}
         return agentcore_response_with_alias
-            
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Agent processing failed: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Agent processing failed: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Agent processing failed: {str(e)}")
 
 @app.get("/ping")
 async def ping():
@@ -348,7 +383,9 @@ async def root():
         },
         "agent_status": "initialized" if rag_agent is not None else "not_initialized",
         "last_reset": last_reset_iso,
-        "reset_count": reset_count
+        "reset_count": reset_count,
+        "available_models": AVAILABLE_MODELS,
+        "default_model": DEFAULT_MODEL_ID
     }
 
 @app.post("/reset")
@@ -356,7 +393,9 @@ async def reset_agent():
     """Reset the in-memory agent object (drops prior conversation state)."""
     global rag_agent, last_reset_iso, reset_count
     try:
-        rag_agent = create_rag_agent()
+        # Clear cache and recreate default agent
+        _agent_cache.clear()
+        rag_agent = _get_or_create_agent(DEFAULT_MODEL_ID)
         reset_count += 1
         last_reset_iso = datetime.now(timezone.utc).isoformat()
         logger.info("RAG agent reset successfully (count=%s)", reset_count)
@@ -364,7 +403,9 @@ async def reset_agent():
             "status": "reset",
             "agent_status": "initialized" if rag_agent else "not_initialized",
             "last_reset": last_reset_iso,
-            "reset_count": reset_count
+            "reset_count": reset_count,
+            "available_models": AVAILABLE_MODELS,
+            "default_model": DEFAULT_MODEL_ID
         }
     except Exception as e:
         logger.error(f"Failed to reset agent: {e}")
@@ -378,7 +419,18 @@ async def reset_status():
         "agent_status": "initialized" if rag_agent is not None else "not_initialized",
         "last_reset": last_reset_iso,
         "reset_count": reset_count,
-        "timestamp": datetime.now(timezone.utc).isoformat()
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "available_models": AVAILABLE_MODELS,
+        "default_model": DEFAULT_MODEL_ID
+    }
+
+@app.get("/models")
+async def list_models():
+    """Return list of allowed foundation models for selection."""
+    return {
+        "available_models": AVAILABLE_MODELS,
+        "default_model": DEFAULT_MODEL_ID,
+        "count": len(AVAILABLE_MODELS)
     }
 
 if __name__ == "__main__":
