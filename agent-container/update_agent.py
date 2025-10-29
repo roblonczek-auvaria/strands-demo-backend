@@ -13,7 +13,7 @@ import time
 # ============================================================================
 
 # TODO: Replace with your actual agent ARN after initial deployment
-AGENT_RUNTIME_ARN = 'arn:aws:bedrock-agentcore:eu-central-1:081302066317:runtime/demo_streaming_rag_agent_prod-XXXXXX'
+AGENT_RUNTIME_ARN = 'arn:aws:bedrock-agentcore:eu-central-1:081302066317:runtime/demo_streaming_rag_agent_prod-6wk6lmHdeK'
 CONTAINER_URI = '081302066317.dkr.ecr.eu-central-1.amazonaws.com/streaming-agent:latest'
 ROLE_ARN = 'arn:aws:iam::081302066317:role/strands-test-agent'
 REGION = 'eu-central-1'

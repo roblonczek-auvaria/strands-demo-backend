@@ -42,20 +42,27 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Agent cache keyed by model_id so we can reuse agents for repeated requests.
-_agent_cache: dict[str, Any] = {}
+# Agent cache keyed by model_id and session_id so we can reuse agents without leaking context.
+_agent_cache: dict[str, dict[str, Any]] = {}
+GLOBAL_SESSION_KEY = "__global__"
 
-def _get_or_create_agent(model_id: Optional[str]) -> Any:
+def _get_or_create_agent(model_id: Optional[str], session_id: Optional[str]) -> Any:
     chosen = model_id or DEFAULT_MODEL_ID
     if chosen not in AVAILABLE_MODELS:
         logger.warning("Unknown model_id '%s' requested; falling back to default '%s'", chosen, DEFAULT_MODEL_ID)
         chosen = DEFAULT_MODEL_ID
-    if chosen in _agent_cache:
-        return _agent_cache[chosen]
+    session_key = GLOBAL_SESSION_KEY
+    if isinstance(session_id, str):
+        trimmed = session_id.strip()
+        if trimmed:
+            session_key = trimmed
+    model_cache = _agent_cache.setdefault(chosen, {})
+    if session_key in model_cache:
+        return model_cache[session_key]
     try:
         agent = create_rag_agent(chosen)
-        _agent_cache[chosen] = agent
-        logger.info("Created new agent for model_id=%s", chosen)
+        model_cache[session_key] = agent
+        logger.info("Created new agent for model_id=%s session_key=%s", chosen, session_key if session_key != GLOBAL_SESSION_KEY else "global")
         return agent
     except Exception as e:
         logger.error("Failed to create agent for model_id=%s: %s", chosen, e)
@@ -63,7 +70,7 @@ def _get_or_create_agent(model_id: Optional[str]) -> Any:
 
 try:
     # Warm default agent
-    rag_agent = _get_or_create_agent(DEFAULT_MODEL_ID)
+    rag_agent = _get_or_create_agent(DEFAULT_MODEL_ID, None)
     logger.info("Default RAG agent initialized successfully (model=%s)", DEFAULT_MODEL_ID)
 except Exception as e:
     logger.error(f"Failed to initialize default RAG agent: {e}")
@@ -200,9 +207,32 @@ async def invoke_agent(request: Union[InvocationRequest, Dict[str, Any]], raw_re
             if request.input and isinstance(request.input, dict):
                 requested_model = request.input.get("model_id") or requested_model
 
-        # Acquire agent (cache per model)
+        session_identifier: Optional[str] = raw_request.headers.get("x-amzn-bedrock-agentcore-runtime-session-id")
+
+        # Allow session_id to be specified in body as well (useful for local testing tools)
+        body_session_id: Optional[str] = None
+        if isinstance(request, dict):
+            body_session_id = request.get("session_id")
+            body_input = request.get("input")
+            if not body_session_id and isinstance(body_input, dict):
+                candidate = body_input.get("session_id")
+                if isinstance(candidate, str):
+                    body_session_id = candidate
+        else:
+            body_session_id = getattr(request, "session_id", None)
+            body_input = getattr(request, "input", None)
+            if not body_session_id and isinstance(body_input, dict):
+                candidate = body_input.get("session_id")  # type: ignore[call-arg]
+                if isinstance(candidate, str):
+                    body_session_id = candidate
+
+        session_identifier = body_session_id or session_identifier
+        if session_identifier:
+            logger.info("Using session_id=%s", session_identifier)
+
+        # Acquire agent (cache per model and session)
         try:
-            agent = _get_or_create_agent(requested_model)
+            agent = _get_or_create_agent(requested_model, session_identifier)
         except Exception:
             raise HTTPException(status_code=500, detail="Failed to create agent for requested model")
 
@@ -395,7 +425,7 @@ async def reset_agent():
     try:
         # Clear cache and recreate default agent
         _agent_cache.clear()
-        rag_agent = _get_or_create_agent(DEFAULT_MODEL_ID)
+        rag_agent = _get_or_create_agent(DEFAULT_MODEL_ID, None)
         reset_count += 1
         last_reset_iso = datetime.now(timezone.utc).isoformat()
         logger.info("RAG agent reset successfully (count=%s)", reset_count)
