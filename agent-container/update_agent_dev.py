@@ -13,14 +13,14 @@ import time
 # ============================================================================
 
 # TODO: Replace with your actual agent ARN after initial deployment
-AGENT_RUNTIME_ARN = 'arn:aws:bedrock-agentcore:eu-central-1:081302066317:runtime/demo_streaming_rag_agent_prod-6wk6lmHdeK'
-CONTAINER_URI = '081302066317.dkr.ecr.eu-central-1.amazonaws.com/streaming-agent:prod'
+AGENT_RUNTIME_ARN = 'arn:aws:bedrock-agentcore:eu-central-1:081302066317:runtime/demo_rag_streaming_agent_staging-LDWXFb4Ts7'
+CONTAINER_URI = '081302066317.dkr.ecr.eu-central-1.amazonaws.com/streaming-agent:staging'
 ROLE_ARN = 'arn:aws:iam::081302066317:role/strands-test-agent'
 REGION = 'eu-central-1'
 
 # Cognito Authentication (from deploy_agent-prod.py)
-COGNITO_USER_POOL_ID = 'eu-central-1_2ZryMv0qs'
-COGNITO_CLIENT_ID = '5aqpc5nkm2cinrfcdiiiks6kgc'
+COGNITO_USER_POOL_ID = 'eu-central-1_OGkb7HbRv'
+COGNITO_CLIENT_ID = '2b10v9vo7lu63usc59g53ruaol'
 COGNITO_REGION = 'eu-central-1'
 
 # ============================================================================

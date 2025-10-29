@@ -16,7 +16,7 @@ import time
 # ============================================================================
 
 AGENT_NAME = 'demo_streaming_rag_agent_prod'  # Use underscores, not hyphens
-CONTAINER_URI = '081302066317.dkr.ecr.eu-central-1.amazonaws.com/streaming-agent:latest'
+CONTAINER_URI = '081302066317.dkr.ecr.eu-central-1.amazonaws.com/streaming-agent:prod'
 ROLE_ARN = 'arn:aws:iam::081302066317:role/strands-test-agent'
 REGION = 'eu-central-1'
 

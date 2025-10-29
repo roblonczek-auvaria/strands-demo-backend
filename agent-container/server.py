@@ -21,6 +21,7 @@ import re
 import logging
 import os
 from rag_agent import create_rag_agent, AVAILABLE_MODELS, DEFAULT_MODEL_ID
+from ask_knowledgebase import get_last_kb_documents_and_clear
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -156,9 +157,15 @@ def _parse_structured_json(text: str) -> Optional[Dict[str, Any]]:
 
 def _build_response_payload(response_str: str) -> tuple[Dict[str, Any], Dict[str, Any], Dict[str, Any], Optional[Dict[str, Any]]]:
     parsed_json = _parse_structured_json(response_str)
+    
+    # Capture knowledge base documents from the last query
+    kb_documents = get_last_kb_documents_and_clear()
+    
     unified = {
-        "answer": parsed_json.get("answer") if parsed_json else None,
+        # Fallback: if the model did not return structured JSON with an 'answer', use the raw text as the answer
+        "answer": parsed_json.get("answer") if parsed_json else response_str,
         "sources": parsed_json.get("sources") if parsed_json else None,
+        "documents": kb_documents,  # Add the knowledge base documents
         "raw": response_str,
         "has_structured": parsed_json is not None,
     }
@@ -171,9 +178,11 @@ def _build_response_payload(response_str: str) -> tuple[Dict[str, Any], Dict[str
         }
     }
     if parsed_json:
-        simple_response = {"response": json.dumps(parsed_json, ensure_ascii=False)}
+        # Include documents in the simple response as well
+        enhanced_json = {**parsed_json, "documents": kb_documents}
+        simple_response = {"response": json.dumps(enhanced_json, ensure_ascii=False)}
     else:
-        simple_response = {"response": response_str}
+        simple_response = {"response": response_str, "documents": kb_documents}
     return unified, agentcore_response, simple_response, parsed_json
 
 # Pydantic models for request/response
