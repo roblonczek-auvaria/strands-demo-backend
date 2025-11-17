@@ -61,8 +61,8 @@ class KnowledgeBaseQuery:
         """
         try:
             query_params = {
-                "vectorBucketName": "acrelec-model-eval",
-                "indexName": "acrelec-model-eval-index",
+                "vectorBucketName": "auvaria-vector-bucket",
+                "indexName": "auvaria-vector-index",
                 "queryVector": {"float32": embedding},
                 "topK": top_k,
                 "returnDistance": True,

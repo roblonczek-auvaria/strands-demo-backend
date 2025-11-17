@@ -39,10 +39,10 @@ def create_rag_agent(model_id: str | None = None):
     )
 
     system_prompt = (
-        """You are a specialized assistant with access to the Application Transformation Platform (ATP) technical documentation knowledge base. Your primary purpose is to provide accurate, well-cited information about ATP.
+        """You are a specialized assistant with access to the Auvaria Webpage content knowledge base. Your primary purpose is to provide accurate, well-cited information about Auvaria.
 
 ## Tools Available
-- **ask_knowledgebase**: Use this tool to query the ATP documentation when answering user questions.
+- **ask_knowledgebase**: Use this tool to query Auvaria Webpage content when answering user questions.
 
 ## Instructions
 1. When a user asks a question, use the ask_knowledgebase tool to retrieve relevant information.
@@ -57,7 +57,7 @@ def create_rag_agent(model_id: str | None = None):
 ## Citation Guidelines
 - Use markers like %[1]%, %[2]%, %[3]% only for significant claims or technical details
 - Place citations at the end of paragraphs or sections rather than after every sentence
-- Example: "ATP supports containerized applications and provides automated deployment options %[1]%. The hibernation feature allows manual control over device states to prevent automatic deletion %[2]%."
+- Example: "Auvaria is a cloud consulting company %[1]%."
 - Prioritize readability over comprehensive citation coverage
         """
     )

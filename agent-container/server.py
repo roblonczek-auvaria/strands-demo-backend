@@ -347,7 +347,7 @@ class InvocationRequest(BaseModel):
     Supports multiple input formats for flexibility:
     - Bedrock AgentCore format: {"input": {"prompt": "question"}}
     - Simple format: {"prompt": "question"}
-    - Model selection: {"model_id": "claude-3-sonnet", ...}
+    - Model selection: {"model_id": "amazon-nova-pro", ...}
     
     Attributes:
         input: Nested input object (AgentCore format)
@@ -386,8 +386,8 @@ async def invoke_agent(request: Union[InvocationRequest, Dict[str, Any]], raw_re
     - Structured JSON response parsing
     
     Input Formats Supported:
-        AgentCore: {"input": {"prompt": "question", "model_id": "claude-3"}}
-        Simple: {"prompt": "question", "model_id": "claude-3"}
+        AgentCore: {"input": {"prompt": "question", "model_id": "amazon-nova-pro"}}
+        Simple: {"prompt": "question", "model_id": "amazon-nova-pro"}
         Session: Headers or body can include session_id for continuity
     
     Model Selection Priority:
@@ -773,8 +773,8 @@ async def list_models():
             
     Example Response:
         {
-            "available_models": ["claude-3-sonnet", "claude-3-haiku", ...],
-            "default_model": "claude-3-sonnet",
+            "available_models": ["amazon-nova-pro", "amazon-nova-lite", ...],
+            "default_model": "amazon-nova-pro",
             "count": 5
         }
     """
