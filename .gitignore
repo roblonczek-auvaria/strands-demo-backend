@@ -1,2 +1,4 @@
 uv.lock
 **__pycache__
+.venv
+deployment_package*
