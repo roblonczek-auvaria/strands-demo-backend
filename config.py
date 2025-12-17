@@ -20,13 +20,13 @@ class DeploymentConfig:
     cognito_client_id: str
     cognito_region: str
     role_arn: str
-    runtime_version: str = 'PYTHON_3_11'  # Default for this project, matching Dockerfile
+    runtime_version: str = 'PYTHON_3_13'  # Default for this project, matching Dockerfile
     network_mode: str = 'PUBLIC'
     
     @property
     def s3_bucket(self) -> str:
         """S3 bucket for deployment packages."""
-        return f"bedrock-agentcore-code-{self.account_id}-{self.region}"
+        return f"sales-demo-agent-code-{self.account_id}-{self.region}"
     
     @property
     def s3_prefix(self) -> str:
@@ -54,7 +54,7 @@ STAGING = DeploymentConfig(
 # Production Configuration
 PROD = DeploymentConfig(
     env='prod',
-    agent_name='demo_streaming_rag_agent_prod',
+    agent_name='streaming_rag_agent_prod',
     region='eu-central-1',
     account_id='081302066317',
     cognito_user_pool_id='eu-central-1_2ZryMv0qs',

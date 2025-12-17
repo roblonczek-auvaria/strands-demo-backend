@@ -4,7 +4,7 @@
 
 set -e  # Exit on any error
 
-PYTHON_VERSION="3.11"
+PYTHON_VERSION="3.13"
 PACKAGE_DIR="deployment_package"
 OUTPUT_ZIP="deployment_package.zip"
 

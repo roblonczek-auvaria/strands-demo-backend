@@ -391,7 +391,7 @@ Examples:
     parser.add_argument(
         '--skip-build',
         action='store_true',
-        help='Skip building package (use existing deployment_package.zip)'
+        help='Skip building package and upload (use existing package on S3)'
     )
     
     parser.add_argument(
@@ -420,7 +420,11 @@ Examples:
         deployer.ensure_s3_bucket()
         
         # Step 3: Upload to S3
-        s3_uri = deployer.upload_to_s3(zip_path)
+        if args.skip_build:
+            deployer.log("Skipping upload as build was skipped (assuming package exists on S3)", "→")
+            s3_uri = f"s3://{config.s3_bucket}/{config.s3_prefix}"
+        else:
+            s3_uri = deployer.upload_to_s3(zip_path)
         
         # Step 4: Create or update agent
         if args.update or args.arn:

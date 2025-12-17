@@ -11,10 +11,10 @@ import os
 
 # List of allowed foundation models for dynamic selection.
 AVAILABLE_MODELS = [
-    "eu.amazon.nova-lite-v1:0",
+    "eu.amazon.nova-2-lite-v1:0",
     "eu.amazon.nova-pro-v1:0",
     "eu.anthropic.claude-sonnet-4-5-20250929-v1:0",
-    "eu.anthropic.claude-sonnet-4-20250514-v1:0",
+    "eu.anthropic.claude-haiku-4-5-20251001-v1:0",
 ]
 
 DEFAULT_MODEL_ID = os.getenv("DEFAULT_MODEL_ID", AVAILABLE_MODELS[1])  # Default to nova-pro unless overridden.
